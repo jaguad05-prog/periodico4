@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>El Deportivo – Periódico Digital</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:sans-serif;background:#f5f5f5}
+  input,textarea,select{font-family:inherit}
+  [contenteditable]:focus{outline:2px solid #c8102e;outline-offset:2px;border-radius:2px}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useRef,useEffect,useCallback}=React;
+
+/* ── SECCIONES Y COLORES ──────────────────────────── */
+const SEC=["FÚTBOL","BALONCESTO","TENIS","FÓRMULA 1","CICLISMO","ATLETISMO"];
+const COL={"FÚTBOL":"#c8102e","BALONCESTO":"#e87722","TENIS":"#006400","FÓRMULA 1":"#cc0000","CICLISMO":"#003087","ATLETISMO":"#6a0dad"};
+const mkT=(c="")=>({id:Date.now()+Math.random(),type:"text",content:c});
+const mkTw=()=>({id:Date.now()+Math.random(),type:"tweet",handle:"",text:"",url:""});
+const DEF=()=>[
+  {id:1,section:"FÚTBOL",    title:"Escribe aquí el titular de tu primera noticia",  subtitle:"El subtítulo amplía la información del titular con más detalle",author:"Redacción",image:null,imageCaption:"",blocks:[mkT("Escribe el cuerpo de la noticia aquí. Selecciona texto y usa los botones N K S para negrita, cursiva o subrayado.\n\nPuedes añadir todos los párrafos que necesites.")],published:false},
+  {id:2,section:"BALONCESTO",title:"Titular de la segunda noticia deportiva",         subtitle:"Subtítulo con información complementaria sobre la noticia",       author:"Redacción",image:null,imageCaption:"",blocks:[mkT("Cuerpo de la segunda noticia.")],published:false},
+  {id:3,section:"TENIS",     title:"Tercera noticia: escribe un titular impactante", subtitle:"El subtítulo debe resumir lo más importante de la noticia",       author:"Redacción",image:null,imageCaption:"",blocks:[mkT("Contenido de la tercera noticia.")],published:false},
+  {id:4,section:"FÓRMULA 1", title:"Cuarta noticia para completar vuestra portada",  subtitle:"Un buen subtítulo engancha al lector y le invita a leer más",     author:"Redacción",image:null,imageCaption:"",blocks:[mkT("Contenido de la cuarta noticia.")],published:false},
+];
+
+/* ── API LOCAL (servidor .bat) ────────────────────── */
+// El servidor corre en el mismo ordenador del profe en puerto 8000
+// Los alumnos acceden por http://IP:8000/periodico.html
+// La IP del servidor se detecta automáticamente desde la URL
+
+function getServerBase(){
+  const loc=window.location;
+  // Funciona tanto en http (local) como en https (Render)
+  if(loc.protocol==="https:"){
+    return `https://${loc.hostname}`;
+  }
+  if(loc.protocol==="http:"){
+    const port=loc.port||"80";
+    return `http://${loc.hostname}:${port}`;
+  }
+  return null;
+}
+
+function fetchConTimeout(url,opts,ms=8000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error("Tiempo de espera agotado")),ms);
+    fetch(url,opts).then(r=>{clearTimeout(timer);resolve(r);}).catch(e=>{clearTimeout(timer);reject(e);});
+  });
+}
+
+function makeApi(base){
+  return{
+    async leer(grupo){
+      const r=await fetchConTimeout(`${base}/${encodeURIComponent(grupo)}`);
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    },
+    async guardar(grupo,data){
+      const payload=limpiarImagenes(data);
+      const r=await fetchConTimeout(`${base}/${encodeURIComponent(grupo)}`,{
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(payload)
+      });
+      if(!r.ok)throw new Error(`HTTP ${r.status}`);
+      return true;
+    }
+  };
+}
+
+function limpiarImagenes(data){
+  return{
+    ...data,
+    articles:(data.articles||[]).map(a=>({...a,image:a.image?"[foto-local]":null}))
+  };
+}
+
+/* ── PANTALLA DE ENTRADA ──────────────────────────── */
+function Entrada({onEntrar}){
+  const[grupo,setGrupo]=useState("");
+  const[nombre,setNombre]=useState("");
+  const[cargando,setCargando]=useState(false);
+  const[error,setError]=useState("");
+
+  const base=getServerBase();
+
+  const entrar=async()=>{
+    if(!grupo.trim()){setError("Escribe el nombre de tu grupo");return;}
+    if(!nombre.trim()){setError("Escribe tu nombre");return;}
+    if(!base){setError("Abre el periódico desde la dirección del servidor, no como archivo local.");return;}
+    setCargando(true);setError("");
+    try{
+      const api=makeApi(base);
+      let existente=null;
+      try{ existente=await api.leer(grupo.trim().toUpperCase()); }catch{}
+      onEntrar(base,grupo.trim().toUpperCase(),nombre.trim(),existente);
+    }catch(e){
+      setError("Error al conectar: "+e.message);
+    }finally{setCargando(false);}
+  };
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1a1a2e,#0f3460)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+      <div style={{background:"#fff",borderRadius:16,padding:"40px 36px",maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,0.4)",textAlign:"center"}}>
+        <div style={{fontSize:52,marginBottom:8}}>🗞️</div>
+        <h1 style={{fontFamily:"Georgia,serif",fontSize:30,fontWeight:900,color:"#111",marginBottom:4}}>EL DEPORTIVO</h1>
+        <p style={{color:"#999",fontSize:12,letterSpacing:2,textTransform:"uppercase",marginBottom:28}}>Periódico Digital de Aula</p>
+
+        {!base&&(
+          <div style={{background:"#fff3cd",border:"1.5px solid #ffc107",borderRadius:8,padding:"12px 14px",marginBottom:20,textAlign:"left"}}>
+            <p style={{fontSize:13,color:"#664d03",lineHeight:1.6}}>
+              ⚠️ Abre el periódico desde la dirección del servidor:<br/>
+              <code style={{fontWeight:700}}>http://IP-del-profe:8000/periodico.html</code><br/>
+              No lo abras como archivo directamente.
+            </p>
+          </div>
+        )}
+
+        <label style={lSt}>NOMBRE DEL GRUPO</label>
+        <input value={grupo} onChange={e=>setGrupo(e.target.value.toUpperCase())}
+          onKeyDown={e=>e.key==="Enter"&&entrar()}
+          placeholder="Ej: GRUPO-A  ·  EQUIPO-3"
+          style={{...iSt,fontFamily:"monospace",fontWeight:700,letterSpacing:1,fontSize:15}} autoFocus/>
+        <p style={{fontSize:11,color:"#aaa",margin:"-10px 0 14px",textAlign:"left"}}>Todos los del grupo escriben exactamente el mismo nombre.</p>
+
+        <label style={lSt}>TU NOMBRE</label>
+        <input value={nombre} onChange={e=>setNombre(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&entrar()}
+          placeholder="Ej: María García"
+          style={{...iSt,marginBottom:20}}/>
+
+        {error&&<p style={{color:"#c8102e",fontWeight:700,fontSize:13,marginBottom:12,textAlign:"left",background:"#fff0f0",padding:"8px 12px",borderRadius:6,border:"1px solid #ffcdd2"}}>{error}</p>}
+
+        <button onClick={entrar} disabled={cargando||!base} style={{...bPri,width:"100%",padding:14,fontSize:15,opacity:(cargando||!base)?0.5:1}}>
+          {cargando?"Conectando...":"Entrar al periódico →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── BLOQUE DE TEXTO ──────────────────────────────── */
+function BloqueTexto({block,onChange}){
+  const ref=useRef(null);
+  return(
+    <div>
+      <div style={{display:"flex",gap:5,marginBottom:5}}>
+        {[["N","bold","Negrita"],["K","italic","Cursiva"],["S̲","underline","Subrayado"]].map(([l,c,t])=>(
+          <button key={c} title={t}
+            onMouseDown={e=>{e.preventDefault();document.execCommand(c);onChange(ref.current.innerHTML);}}
+            style={{width:30,height:30,border:"1.5px solid #ddd",background:"#fff",cursor:"pointer",fontWeight:"bold",fontSize:13,borderRadius:4,fontStyle:c==="italic"?"italic":"normal",textDecoration:c==="underline"?"underline":"none"}}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div ref={n=>{if(n&&ref.current===null){n.innerHTML=block.content||"";}ref.current=n;}}
+        contentEditable suppressContentEditableWarning
+        onInput={()=>onChange(ref.current.innerHTML)}
+        style={{minHeight:80,padding:"10px 12px",border:"2px solid #e0e0e0",borderRadius:6,outline:"none",lineHeight:1.7,fontSize:15,fontFamily:"Georgia,serif",background:"#fafafa"}}/>
+    </div>
+  );
+}
+
+/* ── BLOQUE DE TUIT (editor) ──────────────────────── */
+function BloqueTuit({block,onChange}){
+  return(
+    <div style={{background:"#e8f4fd",border:"2px solid #1da1f2",borderRadius:10,padding:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <div style={{width:28,height:28,borderRadius:"50%",background:"#1da1f2",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+        </div>
+        <span style={{fontWeight:800,fontSize:12,color:"#1da1f2",letterSpacing:1}}>BLOQUE DE TUIT</span>
+      </div>
+      <input value={block.handle} onChange={e=>onChange({...block,handle:e.target.value})} placeholder="@usuario" style={{...iSt,marginBottom:8,fontSize:13}}/>
+      <textarea value={block.text} onChange={e=>onChange({...block,text:e.target.value})} placeholder="Texto del tuit" rows={3} style={{...iSt,resize:"vertical",marginBottom:8,fontSize:13}}/>
+      <input value={block.url} onChange={e=>onChange({...block,url:e.target.value})} placeholder="URL del tuit (opcional)" style={{...iSt,marginBottom:0,fontSize:13}}/>
+    </div>
+  );
+}
+
+/* ── TARJETA TUIT (lectura) ───────────────────────── */
+function TarjetaTuit({tweet}){
+  return(
+    <div style={{border:"1.5px solid #e1e8ed",borderRadius:12,padding:"14px 16px",margin:"16px 0",background:"#fff",maxWidth:520}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <div style={{width:36,height:36,borderRadius:"50%",background:"#1da1f2",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+        </div>
+        <div>
+          <div style={{fontWeight:700,fontSize:14}}>{tweet.handle||"@usuario"}</div>
+          <div style={{fontSize:12,color:"#657786"}}>en X (Twitter)</div>
+        </div>
+      </div>
+      <p style={{margin:0,fontSize:15,lineHeight:1.5,color:"#14171a"}}>{tweet.text||"(sin texto)"}</p>
+      {tweet.url&&<a href={tweet.url} target="_blank" rel="noreferrer" style={{fontSize:12,color:"#1da1f2",display:"block",marginTop:8}}>Ver tuit original ↗</a>}
+    </div>
+  );
+}
+
+/* ── EDITOR DE BLOQUES ────────────────────────────── */
+function EditorBloques({blocks,onChange}){
+  const mv=(i,d)=>{const b=[...blocks];const j=i+d;if(j<0||j>=b.length)return;[b[i],b[j]]=[b[j],b[i]];onChange(b);};
+  const rm=(i)=>onChange(blocks.filter((_,x)=>x!==i));
+  const up=(i,v)=>onChange(blocks.map((b,x)=>x===i?v:b));
+  const ins=(i,b)=>{const nb=[...blocks];nb.splice(i+1,0,b);onChange(nb);};
+  return(
+    <div>
+      {blocks.length===0&&(
+        <div style={{display:"flex",gap:8,justifyContent:"center",margin:"10px 0"}}>
+          <button onClick={()=>onChange([mkT()])} style={{...addBtn,background:"#f0f0f0",color:"#333",borderColor:"#ccc"}}>+ Añadir párrafo</button>
+          <button onClick={()=>onChange([mkTw()])} style={{...addBtn,background:"#e8f4fd",color:"#1da1f2",borderColor:"#1da1f2"}}>🐦 Añadir tuit</button>
+        </div>
+      )}
+      {blocks.map((bl,i)=>(
+        <div key={bl.id}>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:4}}>
+            <div style={{display:"flex",flexDirection:"column",gap:3,paddingTop:4,flexShrink:0}}>
+              <button onClick={()=>mv(i,-1)} disabled={i===0} style={{...ctrlBtn,opacity:i===0?0.25:1}}>▲</button>
+              <button onClick={()=>mv(i,1)} disabled={i===blocks.length-1} style={{...ctrlBtn,opacity:i===blocks.length-1?0.25:1}}>▼</button>
+              <button onClick={()=>rm(i)} style={{...ctrlBtn,background:"#fee",color:"#c8102e",borderColor:"#fcc"}}>✕</button>
+            </div>
+            <div style={{flex:1}}>
+              {bl.type==="text"?<BloqueTexto block={bl} onChange={v=>up(i,{...bl,content:v})}/>:<BloqueTuit block={bl} onChange={v=>up(i,v)}/>}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"center",padding:"5px 0 8px",borderBottom:"1px dashed #e0e0e0",marginBottom:6}}>
+            <button onClick={()=>ins(i,mkT())} style={{...addBtn,background:"#f5f5f5",color:"#555",borderColor:"#ccc"}}>+ Párrafo aquí ↓</button>
+            <button onClick={()=>ins(i,mkTw())} style={{...addBtn,background:"#e8f4fd",color:"#1da1f2",borderColor:"#1da1f2"}}>🐦 Tuit aquí ↓</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── EDITOR DE NOTICIA ────────────────────────────── */
+function EditorNoticia({article,onGuardar,onCancelar}){
+  const[form,setForm]=useState({...article,blocks:article.blocks?article.blocks.map(b=>({...b,id:b.id||Date.now()+Math.random()})):[mkT(article.body||"")]});
+  const fileRef=useRef();
+  const hi=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setForm(x=>({...x,image:ev.target.result}));r.readAsDataURL(f);};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:1000,overflowY:"auto",padding:"20px 0"}}>
+      <div style={{maxWidth:760,margin:"0 auto",background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"}}>
+        <div style={{background:"#c8102e",padding:"16px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:"#fff",fontWeight:800,fontSize:16}}>✏️ EDITOR DE NOTICIA #{article.id}</span>
+          <button onClick={onCancelar} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",cursor:"pointer",fontSize:20,width:32,height:32,borderRadius:"50%"}}>✕</button>
+        </div>
+        <div style={{padding:24}}>
+          <label style={lSt}>SECCIÓN</label>
+          <select value={form.section} onChange={e=>setForm(f=>({...f,section:e.target.value}))} style={iSt}>
+            {SEC.map(s=><option key={s}>{s}</option>)}
+          </select>
+          <label style={lSt}>AUTOR</label>
+          <input value={form.author} onChange={e=>setForm(f=>({...f,author:e.target.value}))} placeholder="Nombre del autor" style={iSt}/>
+          <label style={lSt}>TITULAR *</label>
+          <textarea value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} rows={2} style={{...iSt,resize:"vertical",fontWeight:700,fontSize:17}} placeholder="El titular debe ser impactante y directo"/>
+          <label style={lSt}>SUBTÍTULO *</label>
+          <textarea value={form.subtitle} onChange={e=>setForm(f=>({...f,subtitle:e.target.value}))} rows={2} style={{...iSt,resize:"vertical"}} placeholder="El subtítulo amplía la información del titular"/>
+          <label style={lSt}>FOTO PRINCIPAL</label>
+          <div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:16}}>
+            <div>
+              <button onClick={()=>fileRef.current.click()} style={bSec}>📷 {form.image?"Cambiar":"Subir foto"}</button>
+              <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={hi}/>
+              {form.image&&form.image!=="[foto-local]"&&<button onClick={()=>setForm(f=>({...f,image:null}))} style={{...bSec,marginLeft:8,color:"#c8102e"}}>Quitar</button>}
+            </div>
+            {form.image&&form.image!=="[foto-local]"&&<img src={form.image} alt="preview" style={{width:160,height:100,objectFit:"cover",borderRadius:6,border:"2px solid #eee"}}/>}
+          </div>
+          {form.image&&<><label style={lSt}>PIE DE FOTO</label><input value={form.imageCaption} onChange={e=>setForm(f=>({...f,imageCaption:e.target.value}))} placeholder="Descripción de la imagen" style={iSt}/></>}
+          <div style={{background:"#fff8e1",border:"1px solid #ffc107",borderRadius:6,padding:"8px 12px",marginBottom:14,fontSize:12,color:"#795548"}}>
+            ⚠️ Las fotos se guardan solo en <strong>este ordenador</strong>. El texto y los tuits sí se sincronizan con todo el grupo.
+          </div>
+          <label style={{...lSt,marginTop:4}}>CUERPO DE LA NOTICIA</label>
+          <div style={{background:"#f8f8f8",border:"2px solid #e8e8e8",borderRadius:8,padding:14,marginBottom:16}}>
+            <p style={{fontSize:12,color:"#888",margin:"0 0 12px"}}>▲▼ para reordenar · ✕ para eliminar · Añade bloques con los botones entre párrafos</p>
+            <EditorBloques blocks={form.blocks} onChange={b=>setForm(f=>({...f,blocks:b}))}/>
+          </div>
+          <div style={{display:"flex",gap:12,justifyContent:"flex-end"}}>
+            <button onClick={onCancelar} style={bSec}>Cancelar</button>
+            <button onClick={()=>onGuardar({...form,published:false})} style={bSec}>💾 Borrador</button>
+            <button onClick={()=>onGuardar({...form,published:true})} style={bPri}>✅ Publicar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── LECTOR DE NOTICIA ────────────────────────────── */
+function LectorNoticia({article,onVolver,onEditar}){
+  const color=COL[article.section]||"#c8102e";
+  const now=new Date().toLocaleDateString("es-ES",{day:"numeric",month:"long",year:"numeric"});
+  const blocks=article.blocks||[mkT(article.body||"")];
+  const img=article.image&&article.image!=="[foto-local]"?article.image:null;
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <div style={{background:"#111",padding:"12px 24px",display:"flex",alignItems:"center",gap:16}}>
+        <button onClick={onVolver} style={{background:"none",border:"none",color:"#fff",cursor:"pointer",fontSize:15}}>← Volver a portada</button>
+        <button onClick={onEditar} style={{marginLeft:"auto",background:"#c8102e",border:"none",color:"#fff",cursor:"pointer",padding:"6px 16px",borderRadius:4,fontWeight:700,fontSize:13}}>✏️ Editar</button>
+      </div>
+      <div style={{maxWidth:780,margin:"0 auto",padding:"32px 24px"}}>
+        <div style={{display:"inline-block",background:color,color:"#fff",padding:"3px 10px",fontWeight:900,fontSize:11,letterSpacing:2,marginBottom:16,fontFamily:"sans-serif"}}>{article.section}</div>
+        <h1 style={{fontSize:"clamp(24px,4vw,38px)",fontWeight:900,lineHeight:1.15,color:"#111",margin:"0 0 12px",fontFamily:"Georgia,serif"}}>{article.title}</h1>
+        <p style={{fontSize:19,color:"#444",lineHeight:1.5,margin:"0 0 20px",fontFamily:"Georgia,serif",borderLeft:`4px solid ${color}`,paddingLeft:14}}>{article.subtitle}</p>
+        <div style={{display:"flex",gap:16,alignItems:"center",borderTop:"1px solid #eee",borderBottom:"1px solid #eee",padding:"10px 0",marginBottom:24,fontSize:13,color:"#666"}}>
+          <span style={{fontWeight:700,color:"#111"}}>{article.author}</span>
+          <span>·</span><span>{now}</span>
+          {!article.published&&<span style={{marginLeft:"auto",background:"#ffc107",color:"#000",padding:"2px 8px",borderRadius:4,fontWeight:700,fontSize:11}}>BORRADOR</span>}
+        </div>
+        {img&&<div style={{marginBottom:28}}><img src={img} alt={article.imageCaption} style={{width:"100%",maxHeight:440,objectFit:"cover",display:"block"}}/>{article.imageCaption&&<p style={{fontSize:12,color:"#666",margin:"6px 0 0",fontStyle:"italic",borderLeft:"2px solid #ccc",paddingLeft:8}}>{article.imageCaption}</p>}</div>}
+        {article.image==="[foto-local]"&&<div style={{background:"#f5f5f5",height:160,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:28,borderRadius:4}}><span style={{color:"#bbb",fontSize:13}}>📷 Foto visible solo en el ordenador que la subió</span></div>}
+        {blocks.map(b=>(
+          <div key={b.id}>
+            {b.type==="text"
+              ?<div style={{fontSize:17,lineHeight:1.8,color:"#222",fontFamily:"Georgia,serif",marginBottom:16}} dangerouslySetInnerHTML={{__html:b.content?.replace(/\n/g,"<br/>")}}/>
+              :<TarjetaTuit tweet={b}/>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── TARJETA DE PORTADA ───────────────────────────── */
+function TarjetaPortada({article,index,onClick,onEditar}){
+  const color=COL[article.section]||"#c8102e";
+  const isMain=index===0;
+  const[hover,setHover]=useState(false);
+  const img=article.image&&article.image!=="[foto-local]"?article.image:null;
+  return(
+    <div onClick={onClick}
+      style={{cursor:"pointer",background:hover?"#fafafa":"#fff",overflow:"hidden",position:"relative",borderBottom:isMain?"none":"1px solid #eee",transition:"background 0.15s"}}
+      onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}>
+      {isMain?(
+        <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+          {img?<div style={{overflow:"hidden",height:340,flexShrink:0}}><img src={img} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/></div>
+              :<div style={{height:220,flexShrink:0,background:"linear-gradient(135deg,#1a1a1a,#333)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{color:"rgba(255,255,255,0.1)",fontSize:64}}>📷</span></div>}
+          <div style={{padding:"12px 16px 10px",flex:1}}>
+            <div style={{display:"inline-block",color,fontWeight:900,fontSize:11,letterSpacing:1.5,marginBottom:6,fontFamily:"sans-serif"}}>{article.section}</div>
+            <h2 style={{fontSize:"clamp(22px,3.5vw,36px)",fontWeight:900,lineHeight:1.1,color:"#111",margin:"0 0 8px",fontFamily:"Georgia,serif"}}>{article.title}</h2>
+            <p style={{fontSize:15,color:"#444",lineHeight:1.5,margin:"0 0 8px",fontFamily:"Georgia,serif"}}>{article.subtitle}</p>
+            <div style={{fontSize:12,color:"#888",fontWeight:700}}>{article.author}{!article.published&&<span style={{marginLeft:10,background:"#ffc107",color:"#000",padding:"2px 7px",fontSize:10,fontWeight:700}}>BORRADOR</span>}</div>
+          </div>
+        </div>
+      ):(
+        <div style={{display:"flex",minHeight:100}}>
+          {img&&<img src={img} alt="" style={{width:90,minHeight:100,objectFit:"cover",flexShrink:0}}/>}
+          <div style={{padding:"10px 12px",flex:1}}>
+            <div style={{display:"inline-block",background:color,color:"#fff",padding:"1px 6px",fontWeight:900,fontSize:9,letterSpacing:2,marginBottom:5,fontFamily:"sans-serif"}}>{article.section}</div>
+            <h3 style={{fontSize:14,fontWeight:800,lineHeight:1.25,color:"#111",margin:"0 0 4px",fontFamily:"Georgia,serif"}}>{article.title}</h3>
+            <p style={{fontSize:11.5,color:"#666",margin:0,lineHeight:1.35}}>{article.subtitle}</p>
+            {!article.published&&<span style={{marginTop:5,display:"inline-block",background:"#ffc107",color:"#000",padding:"1px 6px",fontSize:9,fontWeight:700}}>BORRADOR</span>}
+          </div>
+        </div>
+      )}
+      {hover&&<button onClick={e=>{e.stopPropagation();onEditar();}} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,0.8)",color:"#fff",border:"none",cursor:"pointer",padding:"5px 12px",borderRadius:4,fontSize:11,fontWeight:700}}>✏️ EDITAR</button>}
+    </div>
+  );
+}
+
+/* ── APP PRINCIPAL ────────────────────────────────── */
+function App(){
+  const[blobId,setBlobId]=useState(null);
+  const[nombre,setNombre]=useState("");
+  const[articles,setArticles]=useState([]);
+  const[paperName,setPaperName]=useState("EL DEPORTIVO");
+  const[editando,setEditando]=useState(null);
+  const[leyendo,setLeyendo]=useState(null);
+  const[syncStatus,setSyncStatus]=useState("ok");
+  const[lastSaved,setLastSaved]=useState(null);
+  const apiRef   = useRef(null);
+  const grupoRef = useRef(null);
+  const pollRef  = useRef(null);
+  const stRef    = useRef({});
+
+  useEffect(()=>{stRef.current={articles,paperName};},[articles,paperName]);
+  useEffect(()=>()=>{if(pollRef.current)clearInterval(pollRef.current);},[]);
+
+  const startPoll=useCallback((api,grp)=>{
+    if(pollRef.current)clearInterval(pollRef.current);
+    pollRef.current=setInterval(async()=>{
+      try{
+        const r=await apiRef.current.leer(grupoRef.current);
+        if(!r||!r.articles)return;
+        const cur=stRef.current;
+        const remoteKey=JSON.stringify((r.articles||[]).map(a=>({...a,image:null})));
+        const localKey=JSON.stringify((cur.articles||[]).map(a=>({...a,image:null})));
+        if(remoteKey!==localKey){
+          setArticles(prev=>{
+            const imgMap=Object.fromEntries(prev.map(a=>[a.id,a.image]));
+            return(r.articles||[]).map(a=>({...a,image:a.image==="[foto-local]"?(imgMap[a.id]||"[foto-local]"):a.image}));
+          });
+        }
+        if(r.paperName&&r.paperName!==cur.paperName)setPaperName(r.paperName);
+      }catch{}
+    },5000);
+  },[]);
+
+  const entrar=async(base,grp,nom,existente)=>{
+    const api=makeApi(base);
+    apiRef.current=api;
+    grupoRef.current=grp;
+    setBlobId(grp);setNombre(nom);
+    if(existente&&existente.articles){
+      setArticles(existente.articles);
+      setPaperName(existente.paperName||"EL DEPORTIVO");
+    }else{
+      const def=DEF();setArticles(def);setPaperName("EL DEPORTIVO");
+      try{await api.guardar(grp,{articles:def,paperName:"EL DEPORTIVO"});}catch{}
+    }
+    startPoll(api,grp);
+  };
+
+  const push=async(arts,pn)=>{
+    const api=apiRef.current;
+    const grp=grupoRef.current;
+    if(!api||!grp){setSyncStatus("error");return;}
+    setSyncStatus("saving");
+    try{
+      await api.guardar(grp,{articles:arts,paperName:pn});
+      setSyncStatus("ok");
+      setLastSaved(new Date());
+      // Actualizar stRef inmediatamente para que el poll no machaque
+      stRef.current={articles:arts,paperName:pn};
+    }catch(e){
+      setSyncStatus("error");
+      console.error("Error guardando:",e);
+    }
+  };
+
+  const guardarNoticia=async(updated)=>{
+    const next=articles.map(x=>x.id===updated.id?updated:x);
+    // Actualizar stRef ANTES de setArticles para evitar race condition con el poll
+    stRef.current={...stRef.current,articles:next};
+    setArticles(next);
+    setEditando(null);
+    await push(next,paperName);
+  };
+
+  if(!blobId)return <Entrada onEntrar={entrar}/>;
+
+  if(leyendo!==null){
+    const art=articles.find(a=>a.id===leyendo);
+    return <LectorNoticia article={art} onVolver={()=>setLeyendo(null)} onEditar={()=>{setEditando(art);setLeyendo(null);}}/>;
+  }
+
+  const today=new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+  const syncLabel={ok:"✅ Guardado",saving:"💾 Guardando...",error:"⚠️ Error — no se guardó"}[syncStatus];
+  const syncColor={ok:"#2e7d32",saving:"#e87722",error:"#c8102e"}[syncStatus];
+
+  return(
+    <div style={{minHeight:"100vh",background:"#f5f5f5"}}>
+      <header style={{background:"#fff",borderBottom:"3px solid #c8102e"}}>
+        <div style={{maxWidth:1100,margin:"0 auto",padding:"0 20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #eee",padding:"6px 0",fontSize:12,color:"#666",flexWrap:"wrap",gap:6}}>
+            <span style={{textTransform:"capitalize"}}>{today}</span>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontWeight:700,color:syncColor,fontSize:11}}>{syncLabel}</span>
+              {lastSaved&&<span style={{color:"#bbb",fontSize:10}}>{lastSaved.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}</span>}
+              <span style={{background:"#111",color:"#fff",padding:"2px 10px",borderRadius:20,fontWeight:800,fontSize:11}}>👤 {nombre}</span>
+              <button onClick={()=>{if(pollRef.current)clearInterval(pollRef.current);setBlobId(null);}} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#999"}}>Salir</button>
+            </div>
+          </div>
+          <div style={{textAlign:"center",padding:"18px 0 14px"}}>
+            <div contentEditable suppressContentEditableWarning
+              onBlur={async e=>{const v=e.target.innerText;setPaperName(v);await push(articles,v);}}
+              style={{fontSize:"clamp(36px,8vw,72px)",fontWeight:900,letterSpacing:"-2px",color:"#111",lineHeight:1,fontFamily:"Georgia,serif",cursor:"text",outline:"none",display:"inline-block"}}>
+              {paperName}
+            </div>
+            <div style={{fontSize:11,color:"#999",letterSpacing:3,textTransform:"uppercase",marginTop:4}}>Periódico Deportivo Digital · Haz clic en el nombre para editarlo</div>
+          </div>
+          <div style={{display:"flex",borderTop:"2px solid #c8102e",overflowX:"auto"}}>
+            {SEC.map(s=><div key={s} style={{padding:"6px 14px",fontSize:11.5,fontWeight:700,color:"#333",letterSpacing:1,borderRight:"1px solid #eee",whiteSpace:"nowrap"}}>{s}</div>)}
+          </div>
+        </div>
+      </header>
+
+      <main style={{maxWidth:1100,margin:"0 auto",padding:20}}>
+        {articles.length>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"4fr 220px",background:"#fff",border:"1px solid #e0e0e0",marginBottom:20,minHeight:420}}>
+            <div style={{borderRight:"1px solid #e0e0e0"}}>
+              <TarjetaPortada article={articles[0]} index={0} onClick={()=>setLeyendo(articles[0].id)} onEditar={()=>setEditando(articles[0])}/>
+            </div>
+            <div>
+              {articles.slice(1).map((art,i)=>(
+                <div key={art.id} style={{borderBottom:i<2?"1px solid #e0e0e0":"none"}}>
+                  <TarjetaPortada article={art} index={i+1} onClick={()=>setLeyendo(art.id)} onEditar={()=>setEditando(art)}/>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{background:"#e8f4fd",border:"1px solid #90caf9",borderRadius:8,padding:"12px 18px",fontSize:13,color:"#0d47a1"}}>
+          <strong>🔄 SINCRONIZACIÓN:</strong> Los cambios de texto y tuits se guardan automáticamente. Los compañeros los ven en ~5 segundos. Las fotos solo se ven en el ordenador que las subió.
+        </div>
+      </main>
+
+      {editando&&<EditorNoticia article={editando} onGuardar={guardarNoticia} onCancelar={()=>setEditando(null)}/>}
+    </div>
+  );
+}
+
+/* ── ESTILOS ──────────────────────────────────────── */
+const iSt={width:"100%",padding:"8px 12px",border:"2px solid #e0e0e0",borderRadius:6,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:14,fontFamily:"Georgia,serif",display:"block"};
+const lSt={display:"block",fontSize:11,fontWeight:800,letterSpacing:1.5,color:"#666",marginBottom:4,textTransform:"uppercase"};
+const bPri={background:"#c8102e",color:"#fff",border:"none",cursor:"pointer",padding:"10px 22px",fontWeight:800,fontSize:14,borderRadius:6};
+const bSec={background:"#f0f0f0",color:"#333",border:"2px solid #ddd",cursor:"pointer",padding:"8px 18px",fontWeight:700,fontSize:13,borderRadius:6};
+const ctrlBtn={width:26,height:26,border:"1.5px solid #ddd",background:"#fff",cursor:"pointer",fontSize:11,borderRadius:4,padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
+const addBtn={padding:"4px 12px",border:"1.5px dashed",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:700};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
