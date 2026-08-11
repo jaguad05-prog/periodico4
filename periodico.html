@@ -448,6 +448,7 @@ function App(){
   const grupoRef = useRef(null);
   const pollRef  = useRef(null);
   const stRef    = useRef({});
+  const importRef= useRef(null);
 
   useEffect(()=>{stRef.current={articles,paperName};},[articles,paperName]);
   useEffect(()=>()=>{if(pollRef.current)clearInterval(pollRef.current);},[]);
@@ -513,6 +514,138 @@ function App(){
     await push(next,paperName);
   };
 
+  /* ── DESCARGAR EL PERIÓDICO COMO HTML AUTÓNOMO ──── */
+  const descargarPeriodico=()=>{
+    const esc=(s="")=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    const cuerpo=(h="")=>String(h).replace(/<script[\s\S]*?<\/script>/gi,"").replace(/\n/g,"<br/>");
+    const foto=(a)=>(a.image&&a.image!=="[foto-local]")?a.image:null;
+    const bloque=(b)=>b.type==="text"
+      ?`<div class="parrafo">${cuerpo(b.content||"")}</div>`
+      :`<div class="tuit"><div class="tuit-user">${esc(b.handle||"@usuario")}</div><p>${esc(b.text||"")}</p>${b.url?`<a class="enlace" href="${esc(b.url)}" target="_blank" rel="noreferrer">Ver tuit original</a>`:""}</div>`;
+    const fecha=new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    const marca=(a)=>a.published?"":'<span class="borrador">BORRADOR</span>';
+    const ap=articles[0], resto=articles.slice(1);
+    const apFoto=ap?foto(ap):null;
+
+    const portada=ap?`
+<section class="apertura">
+  <a href="#n${ap.id}">
+    ${apFoto?`<img src="${apFoto}" alt="${esc(ap.imageCaption||"")}" style="object-position:${esc(ap.imagePosition||"center")}"/>`:""}
+    <div class="seccion" style="background:${COL[ap.section]||"#c8102e"}">${esc(ap.section)}</div>
+    <h2>${esc(ap.title)}</h2>
+    <p class="sub">${esc(ap.subtitle)}</p>
+    <div class="firma-corta">${esc(ap.author)}${marca(ap)}</div>
+  </a>
+</section>`:"";
+
+    const sumario=resto.length?`<ul class="sumario">${resto.map(a=>`
+  <li><a href="#n${a.id}">
+    <div class="seccion" style="background:${COL[a.section]||"#c8102e"}">${esc(a.section)}</div>
+    <h3>${esc(a.title)}</h3>
+    <p>${esc(a.subtitle)}</p>
+    <div class="firma-corta">${esc(a.author)}${marca(a)}</div>
+  </a></li>`).join("")}</ul>`:"";
+
+    const piezas=articles.map(a=>{
+      const f=foto(a);
+      return `
+<article id="n${a.id}">
+  <div class="seccion" style="background:${COL[a.section]||"#c8102e"}">${esc(a.section)}</div>
+  <h2>${esc(a.title)}</h2>
+  <p class="sub">${esc(a.subtitle)}</p>
+  <div class="firma">${esc(a.author)} · ${esc(fecha)}${marca(a)}</div>
+  ${f?`<img class="principal" src="${f}" alt="${esc(a.imageCaption||"")}" style="object-position:${esc(a.imagePosition||"center")}"/>`:""}
+  ${a.imageCaption&&f?`<p class="pie">${esc(a.imageCaption)}</p>`:""}
+  ${(a.blocks||[]).map(bloque).join("")}
+  <a class="volver" href="#arriba">Volver a la portada</a>
+</article>`;
+    }).join("");
+
+    const doc=`<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>${esc(paperName)} · ${esc(grupoRef.current)}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f5f5f5;color:#111;font-family:sans-serif;padding:24px 16px;scroll-behavior:smooth}
+.hoja{max-width:900px;margin:0 auto;background:#fff;padding:36px 40px;border:1px solid #ddd}
+a{color:inherit;text-decoration:none}
+a:hover h2,a:hover h3{color:#c8102e}
+header.cab{text-align:center;border-bottom:3px solid #c8102e;padding-bottom:14px;margin-bottom:28px}
+h1.cabecera{font-family:Georgia,serif;font-size:clamp(38px,9vw,74px);font-weight:900;letter-spacing:-2px;line-height:1}
+.fecha{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#999;margin-top:8px}
+.seccion{display:inline-block;color:#fff;font-size:10px;font-weight:800;letter-spacing:2px;padding:2px 8px;margin-bottom:8px}
+.apertura img{width:100%;max-height:360px;object-fit:cover;display:block;margin-bottom:14px}
+.apertura h2{font-family:Georgia,serif;font-size:clamp(26px,4vw,36px);font-weight:900;line-height:1.1;margin-bottom:8px}
+.apertura .sub{font-family:Georgia,serif;font-size:17px;color:#444;line-height:1.5}
+.firma-corta{font-size:12px;color:#888;font-weight:700;margin-top:8px}
+ul.sumario{list-style:none;border-top:2px solid #111;margin-top:28px}
+ul.sumario li{border-bottom:1px solid #eee;padding:14px 0}
+ul.sumario h3{font-family:Georgia,serif;font-size:19px;line-height:1.25;margin-bottom:4px}
+ul.sumario p{font-size:13px;color:#666}
+article{border-top:4px solid #111;margin-top:52px;padding-top:22px}
+article h2{font-family:Georgia,serif;font-size:clamp(24px,3.5vw,32px);font-weight:900;line-height:1.15;margin-bottom:10px}
+article .sub{font-family:Georgia,serif;font-size:18px;color:#444;line-height:1.5;border-left:4px solid #c8102e;padding-left:12px;margin-bottom:14px}
+.firma{font-size:12px;color:#666;border-top:1px solid #eee;border-bottom:1px solid #eee;padding:8px 0;margin-bottom:20px}
+article img.principal{width:100%;max-height:420px;object-fit:cover;display:block;margin-bottom:6px}
+.pie{font-size:12px;color:#666;font-style:italic;border-left:2px solid #ccc;padding-left:8px;margin-bottom:20px}
+.parrafo{font-family:Georgia,serif;font-size:17px;line-height:1.8;margin-bottom:16px}
+.tuit{border:1.5px solid #e1e8ed;border-radius:12px;padding:12px 14px;margin:18px 0;max-width:520px}
+.tuit-user{font-weight:700;font-size:14px;margin-bottom:6px}
+.tuit p{font-size:15px;line-height:1.5}
+.enlace{display:inline-block;margin-top:8px;font-size:12px;color:#1da1f2}
+.borrador{background:#ffc107;color:#000;font-size:10px;font-weight:700;padding:2px 6px;margin-left:8px}
+.volver{display:inline-block;margin-top:14px;font-size:12px;color:#c8102e}
+@media print{body{background:#fff;padding:0}.hoja{border:none;max-width:none;padding:0}article{page-break-before:always}.volver{display:none}}
+</style></head>
+<body><div class="hoja" id="arriba">
+<header class="cab"><h1 class="cabecera">${esc(paperName)}</h1><div class="fecha">${esc(fecha)} · ${esc(grupoRef.current)}</div></header>
+${portada}
+${sumario}
+${piezas}
+</div></body></html>`;
+
+    const url=URL.createObjectURL(new Blob([doc],{type:"text/html"}));
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`${grupoRef.current}-${new Date().toISOString().slice(0,10)}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /* ── COPIA DE SEGURIDAD (.json) ─────────────────── */
+  const descargarCopia=()=>{
+    const data=JSON.stringify({grupo:grupoRef.current,paperName,articles},null,2);
+    const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`copia-${grupoRef.current}-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const cargarCopia=(e)=>{
+    const f=e.target.files[0];
+    if(!f)return;
+    e.target.value="";
+    const r=new FileReader();
+    r.onload=async ev=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(!data||!Array.isArray(data.articles))throw new Error("el archivo no tiene el formato del periódico");
+        if(!window.confirm(`Vas a sustituir la portada de ${grupoRef.current} por la copia del archivo. Lo que haya ahora se pierde. ¿Sigues?`))return;
+        const pn=data.paperName||"EL DEPORTIVO";
+        stRef.current={articles:data.articles,paperName:pn};
+        setArticles(data.articles);
+        setPaperName(pn);
+        await push(data.articles,pn);
+      }catch(err){
+        window.alert("No se ha podido cargar la copia: "+err.message);
+      }
+    };
+    r.readAsText(f);
+  };
+
   if(!blobId)return <Entrada onEntrar={entrar}/>;
 
   if(leyendo!==null){
@@ -534,6 +667,10 @@ function App(){
               <span style={{fontWeight:700,color:syncColor,fontSize:11}}>{syncLabel}</span>
               {lastSaved&&<span style={{color:"#bbb",fontSize:10}}>{lastSaved.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}</span>}
               <span style={{background:"#111",color:"#fff",padding:"2px 10px",borderRadius:20,fontWeight:800,fontSize:11}}>👤 {nombre}</span>
+              <button onClick={descargarPeriodico} style={{background:"#111",border:"1px solid #111",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#fff",fontWeight:700}}>Descargar periódico</button>
+              <button onClick={descargarCopia} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#666"}}>Descargar copia</button>
+              <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#666"}}>Cargar copia</button>
+              <input ref={importRef} type="file" accept="application/json,.json" style={{display:"none"}} onChange={cargarCopia}/>
               <button onClick={()=>{if(pollRef.current)clearInterval(pollRef.current);setBlobId(null);}} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#999"}}>Salir</button>
             </div>
           </div>
@@ -567,7 +704,7 @@ function App(){
           </div>
         )}
         <div style={{background:"#e8f4fd",border:"1px solid #90caf9",borderRadius:8,padding:"12px 18px",fontSize:13,color:"#0d47a1"}}>
-          <strong>🔄 SINCRONIZACIÓN:</strong> Los cambios de texto y tuits se guardan automáticamente. Los compañeros los ven en ~5 segundos. Las fotos solo se ven en el ordenador que las subió.
+          <strong>🔄 SINCRONIZACIÓN:</strong> Los cambios de texto y tuits se guardan automáticamente. Los compañeros los ven en ~5 segundos. Las fotos solo se ven en el ordenador que las subió. Al terminar la clase, descarga el periódico.
         </div>
       </main>
 
