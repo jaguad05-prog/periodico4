@@ -134,7 +134,6 @@ function contarPalabras(blocks){
 /* ── PANTALLA DE ENTRADA ──────────────────────────── */
 function Entrada({onEntrar}){
   const[grupo,setGrupo]=useState("");
-  const[nombre,setNombre]=useState("");
   const[cargando,setCargando]=useState(false);
   const[error,setError]=useState("");
 
@@ -142,14 +141,13 @@ function Entrada({onEntrar}){
 
   const entrar=async()=>{
     if(!grupo.trim()){setError("Escribe el nombre de tu grupo");return;}
-    if(!nombre.trim()){setError("Escribe tu nombre");return;}
     if(!base){setError("Abre el periódico desde la dirección del servidor, no como archivo local.");return;}
     setCargando(true);setError("");
     try{
       const api=makeApi(base);
       let existente=null;
       try{ existente=await api.leer(grupo.trim().toUpperCase()); }catch{}
-      onEntrar(base,grupo.trim().toUpperCase(),nombre.trim(),existente);
+      onEntrar(base,grupo.trim().toUpperCase(),grupo.trim().toUpperCase(),existente);
     }catch(e){
       setError("Error al conectar: "+e.message);
     }finally{setCargando(false);}
@@ -177,13 +175,7 @@ function Entrada({onEntrar}){
           onKeyDown={e=>e.key==="Enter"&&entrar()}
           placeholder="Ej: GRUPO-A  ·  EQUIPO-3"
           style={{...iSt,fontFamily:"monospace",fontWeight:700,letterSpacing:1,fontSize:15}} autoFocus/>
-        <p style={{fontSize:11,color:"#aaa",margin:"-10px 0 14px",textAlign:"left"}}>Todos los del grupo escriben exactamente el mismo nombre.</p>
-
-        <label style={lSt}>TU NOMBRE</label>
-        <input value={nombre} onChange={e=>setNombre(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&entrar()}
-          placeholder="Ej: María García"
-          style={{...iSt,marginBottom:20}}/>
+        <p style={{fontSize:11,color:"#aaa",margin:"-10px 0 20px",textAlign:"left"}}>Escribid todos el nombre del grupo, igual y sin vuestro nombre.</p>
 
         {error&&<p style={{color:"#c8102e",fontWeight:700,fontSize:13,marginBottom:12,textAlign:"left",background:"#fff0f0",padding:"8px 12px",borderRadius:6,border:"1px solid #ffcdd2"}}>{error}</p>}
 
@@ -827,7 +819,7 @@ ${piezas}
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <span style={{fontWeight:700,color:syncColor,fontSize:11}}>{syncLabel}</span>
               {lastSaved&&<span style={{color:"#bbb",fontSize:10}}>{lastSaved.toLocaleTimeString("es-ES",{hour:"2-digit",minute:"2-digit"})}</span>}
-              <span style={{background:"#111",color:"#fff",padding:"2px 10px",borderRadius:20,fontWeight:800,fontSize:11}}>👤 {nombre}</span>
+              <span style={{background:"#111",color:"#fff",padding:"2px 10px",borderRadius:20,fontWeight:800,fontSize:11}}>👥 {nombre}</span>
               <button onClick={descargarPeriodico} style={{background:"#111",border:"1px solid #111",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#fff",fontWeight:700}}>Descargar periódico</button>
               <button onClick={descargarCopia} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#666"}}>Descargar copia</button>
               <button onClick={()=>importRef.current.click()} style={{background:"none",border:"1px solid #ddd",cursor:"pointer",fontSize:10,padding:"2px 8px",borderRadius:4,color:"#666"}}>Cargar copia</button>
